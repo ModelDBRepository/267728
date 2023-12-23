@@ -1,0 +1,344 @@
+/*--------------------------------------------------------------------
+Jan 2015
+Leo Medina
+
+June 2022
+Modified by Nathan Titus
+
+Dorsal Column Fiber Model: Constructs axon compartments and topology
+
+This model is based on the MRG fiber model:
+
+McIntyre CC, Richardson AG, and Grill WM. Modeling the excitability of
+mammalian nerve fibers: influence of afterpotentials on the recovery
+cycle. Journal of Neurophysiology 87:995-1006, 2002.
+
+----------------------------------------------------------------------*/
+
+begintemplate Branch
+
+public fiberD, nnodes, ntotal
+public paralength1, nodelength, space_p1, space_p2, space_i
+public rhoa, mycm, cygm, C_dc, g_leak_mysa, g_leak_flut, g_leak_stin
+public section, sl, section_coord
+public insert_cf, deactivate_node, insert_naRsg, insert_juxtaikf, insert_interih
+public modify_juxtaikf, modify_interih, modify_naRsg, modify_inap, modify_ina, modify_iks, modify_tj,modify_mysa_conductance, modify_paranodal_seal, insert_kdifl, insert_kdifrl, insert_nakpump, use_k_ion, insert_kdifrl2, modify_ek, modify_mygm, modify_ek_juxta, insert_na_hs, modify_na_hs, insert_nap_hs, modify_nap_hs, insert_na_st, modify_na_st, insert_na_hs2, modify_na_hs2, insert_na_hs3, modify_na_hs3, insert_na_hs4, modify_na_hs4, insert_na_hs2k, modify_na_hs2k, modify_kdifrl2
+objref section[1], cm_freq[1], section_coord, sl
+create node[1], MYSA[1], FLUT[1], STIN[1]
+
+proc global_parameters(){
+
+  ntotal = nnodes + 10*(nnodes-1)
+
+  e_leak = -80 //mV//
+
+  //morphological parameters//
+  paralength1 = 3
+  nodelength = 1.0
+  space_p1 = 0.002
+  space_p2 = 0.004
+  space_i = 0.004
+
+  //electrical parameters//
+  rhoa = 70 //Ohm-cm//
+  mycm = 0.1 //uF/cm2/lamella membrane//
+  mygm = 0.002 //S/cm2/lamella membrane//
+  g_leak_mysa = 0.001 //S/cm2
+  g_leak_flut = 0.0001 //S/cm2
+  g_leak_stin = 0.0001 //S/cm2
+}
+
+proc deactivate_node(){
+  access node[$1]
+  if (ismembrane("axnode")==1) {uninsert axnode}
+  //if (ismembrane("naRsg")==1) {uninsert naRsg}
+  insert pas
+	g_pas = g_leak_stin
+	e_pas = e_leak
+	xraxial = 1e10
+	xg      = mygm/(nl*2) // lumps all lamellae specific conductances into 1 membrane
+	xc      = mycm/(nl*2) // lumps all lamellae specific capacitances into 1 memb
+}
+
+proc insert_juxtaikf(){
+  forsec "FLUT" {insert juxtaikf}
+}
+
+proc modify_juxtaikf(){
+  if($1==0){
+    forsec "FLUT"{
+      if(ismembrane("juxtaikf")) {uninsert juxtaikf}
+      }
+  }else{
+    forsec "FLUT"{
+      if(ismembrane("juxtaikf")) {gkfbar_juxtaikf = gkfbar_juxtaikf*$1}
+    }
+  }
+}
+
+proc insert_interih(){
+  forsec "STIN" {insert interih}
+}
+
+proc modify_interih(){
+  if($1==0){
+    forsec "STIN" if(ismembrane("interih")) {uninsert interih}
+  }else{
+    forsec "STIN" if(ismembrane("interih")) {ghbar_interih = ghbar_interih*$1}
+  }
+}
+
+proc modify_ina(){
+  forsec "node"{
+    if(ismembrane("axnode")) {gnabar_axnode = gnabar_axnode*$1}
+    if(ismembrane("axnodena2")) {gnabar_axnodena2 = gnabar_axnodena2*$1}
+  }
+}
+
+proc modify_inap(){
+  forsec "node"{
+    if(ismembrane("axnode")) {gnapbar_axnode = gnapbar_axnode*$1}
+    if(ismembrane("axnodena2")) {gnapbar_axnodena2 = gnapbar_axnodena2*$1}
+  }
+}
+
+proc modify_iks(){
+  forsec "node" {
+    if(ismembrane("axnode")) {gkbar_axnode = gkbar_axnode*$1}
+    if(ismembrane("axnodena2")) {gkbar_axnodena2 = gkbar_axnodena2*$1}
+  }
+}
+
+proc modify_mysa_conductance(){
+  forsec "MYSA" {g_pas = g_pas*$1}
+}
+
+proc modify_paranodal_seal(){
+  forsec "MYSA" {xraxial = xraxial*$1}
+}
+
+proc modify_tj(){
+  forsec "FLUT" {xg[1] = $1} //Gow & Devaux (2008) Tight junction myelin resistivity
+  forsec "MYSA" {xg[1] = $1} //Gow & Devaux (2008) Tight junction myelin resistivity
+  forsec "STIN" {xg[1] = $1} //Gow & Devaux (2008) Tight junction myelin resistivity
+}
+
+proc modify_ek(){
+  forall { if(ismembrane("axnode")) ek_axnode = $1 if(ismembrane("juxtaikf"))ek_juxtaikf = $1 if(ismembrane("axnodena"))ek_axnodena = $1}
+}
+
+proc modify_ek_juxta(){
+  forall { if(ismembrane("juxtaikf")) ek_juxtaikf = $1}
+}
+
+proc modify_mygm(){
+  if(is_xtra == 1){
+    forsec "STIN" { xg_extracellular = xg_extracellular*$1 }
+    forsec "MYSA" { xg_extracellular = xg_extracellular*$1 }
+    forsec "FLUT" { xg_extracellular = xg_extracellular*$1 }
+  }
+}
+
+proc insert_na_hs2(){
+  forsec "node" {
+    if(ismembrane("axnode")) {uninsert axnode insert axnodena2}
+  }
+}
+
+proc modify_na_hs2(){
+  forsec "node"{
+    if(ismembrane("axnodena2")){
+      HSbiasV_axnodena2 = $1
+      SIF_axnodena2 = SIF_axnodena2*$2
+    }
+  }
+}
+
+proc dependent_variables(){ //put here different morphologies/electrical parameters
+  model = 1 //default, useful for back-compatibility
+  if(numarg()>0) { model = $1 }
+
+  if(model==1){
+    if (fiberD<1.4) {fiberD = 1.4} //Note that below this number axonD becomes smaller than nodeD
+    axonD = 0.7*fiberD - 0.63  //Belanger et al 2012
+    g = axonD/fiberD //definition of g-ratio
+    //Linear scaling of MRG model parameters:
+    nodeD = 0.345*fiberD - 0.148
+    paraD1 = nodeD
+    paraD2 = axonD //0.889*fiberD - 1.91
+    deltax = int(92.765*fiberD + 108.97) //integer for consistency with original MRG description
+    paralength2 = int(2.581*fiberD + 19.59)
+    nl = int(6.372*fiberD + 51.823)
+    interlength  = (deltax-nodelength-(2*paralength1)-(2*paralength2))/6
+    }
+  if(model==2){
+    axonD = 0.73*fiberD - 0.75  //Belanger et al 2012 adjusted
+    nodeD = 0.29*fiberD + 0.36 //
+    paraD1 = nodeD
+    paraD2 = axonD //0.889*fiberD - 1.91
+    deltax = int(92.765*fiberD + 108.97) //integer for consistency with original MRG description
+    paralength2 = int(2.581*fiberD + 19.59)
+    nl = int(6.372*fiberD + 51.823)
+    interlength  = (deltax-nodelength-(2*paralength1)-(2*paralength2))/6
+  }
+
+  //common to models
+  paranodes1 = 2*(nnodes-1) // MYSA
+  paranodes2 = 2*(nnodes-1) // FLUT
+  axoninter  = 6*(nnodes-1) // STIN
+  //Electrical
+	Rpn0 = (rhoa*100)/(PI*((((nodeD/2)+space_p1)^2)-((nodeD/2)^2))) // 100 converts rhoa from ohm-cm to Mohm-cm, and denominator from um^2 to cm^2. Rpn0 in Mohm/cm
+	Rpn1 = (rhoa*100)/(PI*((((paraD1/2)+space_p1)^2)-((paraD1/2)^2)))
+	Rpn2 = (rhoa*100)/(PI*((((paraD2/2)+space_p2)^2)-((paraD2/2)^2)))
+	Rpx  = (rhoa*100)/(PI*((((axonD/2)+space_i)^2)-((axonD/2)^2)))
+
+}
+
+proc build(){
+  objref section[ntotal], cm_freq[ntotal]
+  section_coord = new Vector(ntotal,0)
+  create node[nnodes], MYSA[paranodes1], FLUT[paranodes2], STIN[axoninter]
+
+  sl = new SectionList()
+
+  for i=0,nnodes-1 {
+		node[i]{
+			ii = i
+			section[i] = new SectionRef()
+			sl.append()
+
+			section_coord.x[ii] = .5*nodelength + i*deltax
+
+			nseg = 1
+			diam = nodeD
+			L  = nodelength
+			Ra = rhoa
+			insert axnode
+      if(is_xtra==1){
+          insert extracellular
+          xraxial = Rpn0
+          xg = 1e10 // short circuit
+          xc = 0    // short circuit
+      }
+      cm = C_dc
+		}
+	}
+
+	for i=0, paranodes1-1 {
+		MYSA[i]{
+			ii = i + nnodes
+			section[ii] = new SectionRef()
+                        sl.append()
+
+			if (i % 2 == 0) { section_coord.x[ii] = nodelength + .5*paralength1 + int(i/2)*deltax }	// left mysa of each segment
+			if (i % 2 == 1) { section_coord.x[ii] = nodelength + 1.5*paralength1 + 2*paralength2 + 6*interlength + int(i/2)*deltax } // right mysa of each segment
+
+			nseg = 1
+			diam = fiberD
+			L  = paralength1
+			Ra = rhoa*(1/(paraD1/fiberD)^2)
+			insert pas
+			g_pas  = g_leak_mysa*paraD1/fiberD
+			e_pas  = e_leak
+      if(is_xtra==1){
+          insert extracellular
+          xraxial=Rpn1
+          xg=mygm/(nl*2)
+          xc=mycm/(nl*2)
+      }
+      cm = C_dc*paraD1/fiberD
+		}
+	}
+
+	for i=0, paranodes2-1 {
+		FLUT[i]{
+			ii = i + nnodes + paranodes1
+			section[ii] = new SectionRef()
+                        sl.append()
+
+			if (i % 2 == 0) { section_coord.x[ii] = nodelength + paralength1 + .5*paralength2 + int(i/2)*deltax } // left flut
+			if (i % 2 == 1) { section_coord.x[ii] = nodelength + paralength1 + 1.5*paralength2 + 6*interlength + int(i/2)*deltax } //right flut
+
+			nseg = 1
+			diam = fiberD
+			L  = paralength2
+			Ra = rhoa*(1/(paraD2/fiberD)^2)
+
+			insert pas
+			g_pas  = g_leak_flut*paraD2/fiberD
+			e_pas  = e_leak
+      if(is_xtra==1){
+			    insert extracellular
+          xraxial=Rpn2
+          xg=mygm/(nl*2)
+          xc=mycm/(nl*2)
+      }
+      cm = C_dc*paraD2/fiberD
+		}
+	}
+
+	for i=0, axoninter-1 {
+		STIN[i]{
+			ii = i + nnodes + paranodes1 + paranodes2
+			section[ii] = new SectionRef()
+            sl.append()
+
+			if (i % 6 == 0) { section_coord.x[ii] = nodelength + paralength1 + paralength2 + 0.5*interlength + int(i/6)*deltax }
+			if (i % 6 == 1) { section_coord.x[ii] = nodelength + paralength1 + paralength2 + 1.5*interlength + int(i/6)*deltax }
+			if (i % 6 == 2) { section_coord.x[ii] = nodelength + paralength1 + paralength2 + 2.5*interlength + int(i/6)*deltax }
+			if (i % 6 == 3) { section_coord.x[ii] = nodelength + paralength1 + paralength2 + 3.5*interlength + int(i/6)*deltax }
+			if (i % 6 == 4) { section_coord.x[ii] = nodelength + paralength1 + paralength2 + 4.5*interlength + int(i/6)*deltax }
+			if (i % 6 == 5) { section_coord.x[ii] = nodelength + paralength1 + paralength2 + 5.5*interlength + int(i/6)*deltax }
+
+			nseg = 1
+			diam = fiberD
+			L  = interlength
+			Ra = rhoa*(1/(axonD/fiberD)^2)
+
+			insert pas
+			g_pas  = g_leak_stin*axonD/fiberD
+			e_pas  = e_leak
+      if(is_xtra==1){
+			    insert extracellular
+          xraxial=Rpx
+          xg=mygm/(nl*2)
+          xc=mycm/(nl*2)
+      }
+			cm = C_dc*axonD/fiberD
+		}
+	}
+
+	for i=0, nnodes-2 {
+		connect MYSA[2*i](0), node[i](1)
+		connect FLUT[2*i](0), MYSA[2*i](1)
+		connect STIN[6*i](0), FLUT[2*i](1)
+		connect STIN[6*i+1](0), STIN[6*i](1)
+		connect STIN[6*i+2](0), STIN[6*i+1](1)
+		connect STIN[6*i+3](0), STIN[6*i+2](1)
+		connect STIN[6*i+4](0), STIN[6*i+3](1)
+		connect STIN[6*i+5](0), STIN[6*i+4](1)
+		connect FLUT[2*i+1](0), STIN[6*i+5](1)
+		connect MYSA[2*i+1](0), FLUT[2*i+1](1)
+		connect node[i+1](0), MYSA[2*i+1](1)
+		}
+
+}
+
+proc init(){
+  fiberD = 6 //default if no arg
+  nnodes = 21 //default if no arg
+  model = 1
+  C_dc = 2  //uF/cm2
+  is_xtra = 1
+  if (numarg()>0) {fiberD=$1}
+  if (numarg()>1) {nnodes=$2}
+  if (numarg()>2) {model=$3}
+  if (numarg()>3) {C_dc=$4}
+  if (numarg()>4) {is_xtra = $5}
+
+  global_parameters()
+  dependent_variables(model)
+  build()
+}
+
+endtemplate Branch

@@ -1,0 +1,104 @@
+/*--------------------------------------------------------------------
+Jan 2015
+Leo Medina
+
+June 2022
+Modified by Nathan Titus
+
+Dorsal Column Fiber Model: Contains the template for the DC fiber model
+
+This model is based on the MRG fiber model:
+
+McIntyre CC, Richardson AG, and Grill WM. Modeling the excitability of
+mammalian nerve fibers: influence of afterpotentials on the recovery
+cycle. Journal of Neurophysiology 87:995-1006, 2002.
+
+----------------------------------------------------------------------*/
+
+// ---------------------- Global Variables ----------------------------
+
+{load_file("branch.hoc")}
+
+begintemplate DCFiber
+public axon, section, fiberD, nnodes, xcoord, ycoord, zcoord, total_sections, sl
+
+objref axon  //main branch
+objref xcoord, ycoord, zcoord //3D coordinates of all sections
+objref vectmp //auxiliar vector for filling coordinates
+objref section[1]
+objref sl
+
+proc dependent_var() {
+  midnode=(axonnodes-1)/2
+}
+
+
+func total_sections(){
+  Nsections = axon.ntotal
+  return Nsections
+}
+
+// ---------------------- Building Axon ----------------------------
+proc topo(){
+
+  axon = new Branch(fiberD,axonnodes,modelflag,C_dc)
+  axon.insert_juxtaikf()
+  axon.insert_interih()
+  axon.deactivate_node(0) //shunt end
+  axon.deactivate_node(axonnodes-1) //shunt end
+  forsec axon.sl sl.append()
+
+  // realigning axon w/ middle node @ x = 0
+  axon.section_coord = axon.section_coord.add(-axon.section_coord.x[midnode])
+
+  xcoord = new Vector()
+  ycoord = new Vector() //Y coord is zero for all sections. Change as needed
+  zcoord = new Vector()
+  vectmp = new Vector(axon.ntotal,0)
+
+  xcoord.append(axon.section_coord)
+  ycoord.append(vectmp)
+  zcoord.append(vectmp)
+
+  // rescaling distance from um -> mm
+  xcoord.mul(1e-3)
+  ycoord.mul(1e-3)
+  zcoord.mul(1e-3)
+
+  //compiling sections
+  objref section[total_sections()]
+  i = 0
+  forsec axon.sl {section[i] = new SectionRef() i+=1}
+
+}
+
+proc init(){
+
+  fiberD = 6
+  axonnodes = 101
+  fiber_type = 1
+  is_constant_cm = 1
+  C_dc = 1
+  is_xtra = 1
+
+  if (numarg()>0) {fiberD = $1}
+  if (numarg()>1) {axonnodes = $2}
+  if (numarg()>2) {fiber_type = $3}
+  if (numarg()>3) {is_constant_cm = $4}
+  if (numarg()>4) {C_dc = $5}
+  if (numarg()>5) {is_xtra = $6}
+
+  modelflag = 2
+  
+  sl = new SectionList()
+  dependent_var()
+  topo()
+  nnodes = axon.nnodes
+  if (is_xtra == 1) { forsec sl { insert xtra }}
+  axon.insert_na_hs2() 
+  axon.modify_na_hs2(-15,1)
+
+}
+
+endtemplate DCFiber
+
